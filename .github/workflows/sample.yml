@@ -1,0 +1,103 @@
+name: Build, Test, and Deploy
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+github_token: ${{ secrets.GITHUB_TOKEN }}
+
+env:
+  APP_NAME: my-application
+  DOCKER_IMAGE: my-registry/${{ env.APP_NAME }}:${{ github.run_number }}
+  BUILD_ENV: ${{ inputs.BUILD_TYPE }}
+
+inputs:
+  BRANCH_NAME:
+    description: 'Git branch to build'
+    required: true
+    default: main
+  BUILD_TYPE:
+    description: 'Build environment type'
+    required: true
+    options:
+      - development
+      - staging
+      - production
+  RUN_TESTS:
+    description: 'Run tests before building'
+    required: false
+    default: true
+  PUSH_IMAGE:
+    description: 'Push Docker image to registry'
+    required: false
+    default: true
+
+jobs:
+  build-with-makefile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.BRANCH_NAME }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'adoptium'
+
+      - name: Build application
+        run: |
+          make build ENV=${{ env.BUILD_ENV }}
+
+  run-tests:
+    needs: build-with-makefile
+    if: ${{ inputs.RUN_TESTS == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.BRANCH_NAME }}
+
+      - name: Run tests
+        run: make test
+
+  build-docker-image:
+    needs: run-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.BRANCH_NAME }}
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.DOCKER_IMAGE }} --build-arg ENV=${{ env.BUILD_ENV }} .
+
+  push-docker-image:
+    needs: build-docker-image
+    if: ${{ inputs.PUSH_IMAGE == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.BRANCH_NAME }}
+
+      - name: Set up Docker login credentials
+        run: echo '${{ secrets.DOCKER_CREDS }}' | docker login -u username --password-stdin my-registry
+
+      - name: Push Docker image
+        run: |
+          echo "docker push"
+          # docker push ${{ env.DOCKER_IMAGE }}
+
+          # # Also tag and push as latest if on main branch
+          # if [ "$${{ inputs.BRANCH_NAME }}" == "main" ]; then
+          #   docker tag ${{ env.DOCKER_IMAGE }} my-registry/${{ env.APP_NAME }}:latest
+          #   docker push my-registry/${{ env.APP_NAME }}:latest
+          # fi
