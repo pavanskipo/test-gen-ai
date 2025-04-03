@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:18-alpine'
-            args '--network host -v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any
     
     parameters {
         string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Git branch to build')
@@ -18,17 +13,10 @@ pipeline {
         APP_NAME = 'my-application'
         DOCKER_IMAGE = "my-registry/${APP_NAME}:${BUILD_NUMBER}"
         BUILD_ENV = "${params.BUILD_TYPE}"
+        NODE_ENV = "${params.BUILD_TYPE}"
     }
     
     stages {
-        stage('Setup Environment') {
-            steps {
-                // Install make and docker cli
-                sh 'apk add --no-cache make docker-cli'
-            }
-        }
-        
-        // Rest of the stages remain the same
         stage('Checkout') {
             steps {
                 // Checkout the repository from GitHub
@@ -41,11 +29,18 @@ pipeline {
                 ])
             }
         }
-        
-        stage('Build with Makefile') {
+  
+        stage('Install Dependencies') {
             steps {
-                // Use the Makefile for building the application
-                sh "make build ENV=${BUILD_ENV}"
+                // Install dependencies directly
+                sh 'npm ci'
+            }
+        }
+        
+        stage('Build Application') {
+            steps {
+                // Build the application with environment variable
+                sh "NODE_ENV=${NODE_ENV} npm run build"
             }
         }
         
@@ -54,8 +49,15 @@ pipeline {
                 expression { params.RUN_TESTS == true }
             }
             steps {
-                // Use the Makefile to run tests
-                sh 'make test'
+                // Run tests directly
+                sh 'npm run test'
+            }
+        }
+        
+        stage('Run Linting') {
+            steps {
+                // Run linting checks
+                sh 'npm run lint || true'  // Continue even if linting fails
             }
         }
         
@@ -71,21 +73,26 @@ pipeline {
                 expression { params.PUSH_IMAGE == true }
             }
             steps {
-
-                println "pushed to docker"
                 // Push the Docker image to a registry
-                // withCredentials([string(credentialsId: 'docker-registry-credentials', variable: 'DOCKER_CREDS')]) {
-                //     sh 'echo ${DOCKER_CREDS} | docker login -u username --password-stdin my-registry'
-                //     sh "docker push ${DOCKER_IMAGE}"
+                withCredentials([string(credentialsId: 'docker-registry-credentials', variable: 'DOCKER_CREDS')]) {
+                    sh 'echo ${DOCKER_CREDS} | docker login -u username --password-stdin my-registry'
+                    sh "docker push ${DOCKER_IMAGE}"
                     
-                //     // Also tag and push as latest if on main branch
-                //     script {
-                //         if (params.BRANCH_NAME == 'main') {
-                //             sh "docker tag ${DOCKER_IMAGE} my-registry/${APP_NAME}:latest"
-                //             sh "docker push my-registry/${APP_NAME}:latest"
-                //         }
-                //     }
-                // }
+                    // Also tag and push as latest if on main branch
+                    script {
+                        if (params.BRANCH_NAME == 'main') {
+                            sh "docker tag ${DOCKER_IMAGE} my-registry/${APP_NAME}:latest"
+                            sh "docker push my-registry/${APP_NAME}:latest"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Clean Up') {
+            steps {
+                // Clean up artifacts
+                sh 'rm -rf dist node_modules/.cache || true'
             }
         }
     }
