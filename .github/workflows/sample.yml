@@ -1,67 +1,89 @@
-name: Build and Deploy
+name: Build and Deploy Application
 
 on:
   workflow_dispatch:
     inputs:
-      branch-name:
+      BRANCH_NAME:
         type: string
         default: main
         description: Git branch to build
-        required: false
-      build-environment:
+      BUILD_TYPE:
         type: choice
         options: ['development', 'staging', 'production']
         description: Build environment type
-        required: true
-      run-tests:
+      RUN_TESTS:
         type: boolean
         default: true
         description: Run tests before building
-        required: false
-      push-image:
+      PUSH_IMAGE:
         type: boolean
         default: true
         description: Push Docker image to registry
-        required: false
 
 env:
   APP_NAME: my-application
-  DOCKER_IMAGE: "my-registry/${{ inputs.build-environment }}:${{ steps.build-docker-image.outputs.build-number }}"
 
 jobs:
-  build-and-deploy:
+
+  checkout-and-build:
     runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout code
-        type: checkout
-        uses: actions/checkout@v2
-        
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.BRANCH_NAME }}
+    
+  build-with-makefile:
+    runs-on: ubuntu-latest
+    needs: checkout-and-build
+    
+    env:
+      BUILD_ENV: ${{ inputs.BUILD_TYPE }}
+    
+    steps:
       - name: Build application
-        run: make build ENV=${{ inputs.build-environment }}
-        
+        run: make build ENV=${BUILD_ENV}
+
+  run-tests:
+    runs-on: ubuntu-latest
+    needs: build-with-makefile
+    if: contains(github.event_name, 'workflow_dispatch') && inputs.RUN_TESTS == 'true'
+    
+    steps:
       - name: Run tests
-        if: inputs.run-tests == 'true'
         run: make test
-        
+
+  build-docker-image:
+    runs-on: ubuntu-latest
+    needs: run-tests
+    
+    env:
+      DOCKER_IMAGE: "my-registry/${{ env.APP_NAME }}:${{ github.run_number }}"
+    
+    steps:
       - name: Build Docker image
-        id: build-docker-image
-        uses: docker/metadata-action@v1
+        run: docker build -t ${{ env.DOCKER_IMAGE }} --build-arg ENV=${BUILD_ENV} .
+
+  push-docker-image:
+    runs-on: ubuntu-latest
+    needs: build-docker-image
+    if: contains(github.event_name, 'workflow_dispatch') && inputs.PUSH_IMAGE == 'true'
+    
+    secrets:
+      DOCKER_REGISTRY_CREDENTIALS: ${{ secrets.DOCKER_REGISTRY_CREDENTIALS }}
+    
+    steps:
+      - name: Log in to Docker registry
+        uses: docker/login-action@v3
         with:
-          images: ${{ env.DOCKER_IMAGE }}
-          context: .
-          metadata-file: ./Dockerfile
-      
-      - name: Push Docker image to registry
-        if: inputs.push-image == 'true'
-        uses: docker/login-action@v2
-        with:
-          credentials: secrets.DOCKER_REGISTRY_CREDENTIALS
+          credentials-id: DOCKER_REGISTRY_CREDENTIALS
+    
+      - name: Push Docker image
         run: |
-          echo "Pushing Docker image..."
           docker push ${{ env.DOCKER_IMAGE }}
           
-          if [[ "${{ inputs.branch-name }}" == "main" ]]; then
-            echo "Tagging and pushing as latest..."
+          if [ "$BRANCH_NAME" == "main" ]; then
             docker tag ${{ env.DOCKER_IMAGE }} my-registry/${{ env.APP_NAME }}:latest
             docker push my-registry/${{ env.APP_NAME }}:latest
           fi
