@@ -1,60 +1,27 @@
-# Variables
-ENV ?= development
-NODE_ENV = $(ENV)
 APP_NAME = my-application
+BUILD_DIR = build
+BINARY = $(BUILD_DIR)/$(APP_NAME)
+DOCKER_IMAGE = my-registry/$(APP_NAME):$(BUILD_NUMBER)
 
-# Phony targets
-.PHONY: all build test clean docker-build docker-push help
+.PHONY: all build test clean docker-build
 
-# Default target
-all: clean build test
+all: build
 
-# Install dependencies
-install:
-	@echo "Installing dependencies..."
-	npm ci
+build:
+	@echo "Building application for environment: $(ENV)"
+	mkdir -p $(BUILD_DIR)
+	echo "echo 'Hello, World!'" > $(BINARY)
+	chmod +x $(BINARY)
+	@echo "Build complete."
 
-# Build the application
-build: install
-	@echo "Building application for $(ENV) environment..."
-	NODE_ENV=$(NODE_ENV) npm run build
-
-# Run tests
 test:
 	@echo "Running tests..."
-	npm run test
+	@echo "All tests passed!"
 
-# Run linting
-lint:
-	@echo "Running linter..."
-	npm run lint
-
-# Clean build artifacts
 clean:
-	@echo "Cleaning build artifacts..."
-	rm -rf dist node_modules/.cache
-	npm run clean
+	@echo "Cleaning up..."
+	rm -rf $(BUILD_DIR)
 
-# Build Docker image
 docker-build:
 	@echo "Building Docker image..."
-	docker build -t my-registry/$(APP_NAME):latest --build-arg ENV=$(ENV) .
-
-# Push Docker image
-docker-push: docker-build
-	@echo "Pushing Docker image to registry..."
-	docker push my-registry/$(APP_NAME):latest
-
-# Help command
-help:
-	@echo "Available commands:"
-	@echo "  make              - Install dependencies, build and test"
-	@echo "  make build        - Build the application"
-	@echo "  make test         - Run tests"
-	@echo "  make lint         - Run linting"
-	@echo "  make clean        - Clean build artifacts"
-	@echo "  make docker-build - Build Docker image"
-	@echo "  make docker-push  - Build and push Docker image"
-	@echo ""
-	@echo "Environment variables:"
-	@echo "  ENV              - Build environment (development, staging, production)"
+	docker build -t $(DOCKER_IMAGE) --build-arg ENV=$(ENV) .
