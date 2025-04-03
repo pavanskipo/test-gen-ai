@@ -1,4 +1,9 @@
-name: Build and Deploy Application
+name: Build and Deploy
+
+env:
+  APP_NAME: my-application
+  DOCKER_IMAGE: "my-registry/${{ env.APP_NAME }}:${{ GITHUB_RUN_ID }}"
+  BUILD_ENV: "${{ inputs.BUILD_TYPE }}"
 
 on:
   workflow_dispatch:
@@ -20,70 +25,87 @@ on:
         default: true
         description: Push Docker image to registry
 
-env:
-  APP_NAME: my-application
-
 jobs:
 
-  checkout-and-build:
+  checkout-code:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.BRANCH_NAME }}
-    
-  build-with-makefile:
+          repository: pavanskipo/test-gen-ai
+          branch: ${{ inputs.BRANCH_NAME }}
+
+  build-application:
     runs-on: ubuntu-latest
-    needs: checkout-and-build
-    
+    needs: checkout-code
     env:
-      BUILD_ENV: ${{ inputs.BUILD_TYPE }}
-    
+      ENV: ${{ inputs.BUILD_TYPE }}
     steps:
       - name: Build application
-        run: make build ENV=${BUILD_ENV}
+        run: |
+          make build
 
   run-tests:
     runs-on: ubuntu-latest
-    needs: build-with-makefile
-    if: contains(github.event_name, 'workflow_dispatch') && inputs.RUN_TESTS == 'true'
-    
+    needs: build-application
+    if: inputs.RUN_TESTS == 'true'
     steps:
       - name: Run tests
-        run: make test
+        run: |
+          make test
 
   build-docker-image:
     runs-on: ubuntu-latest
     needs: run-tests
-    
     env:
-      DOCKER_IMAGE: "my-registry/${{ env.APP_NAME }}:${{ github.run_number }}"
-    
-    steps:
-      - name: Build Docker image
-        run: docker build -t ${{ env.DOCKER_IMAGE }} --build-arg ENV=${BUILD_ENV} .
-
-  push-docker-image:
-    runs-on: ubuntu-latest
-    needs: build-docker-image
-    if: contains(github.event_name, 'workflow_dispatch') && inputs.PUSH_IMAGE == 'true'
-    
-    secrets:
-      DOCKER_REGISTRY_CREDENTIALS: ${{ secrets.DOCKER_REGISTRY_CREDENTIALS }}
-    
+      ENV: ${{ inputs.BUILD_TYPE }}
     steps:
       - name: Log in to Docker registry
         uses: docker/login-action@v3
         with:
-          credentials-id: DOCKER_REGISTRY_CREDENTIALS
-    
+          registry: my-registry
+          credentials-id: docker-registry-credentials
+      - name: Build Docker image
+        id: build-docker
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          labels: |
+            org.opencontainers.image.description: Built from GitHub Actions
+      - name: Build and push Docker image
+        uses: docker/build-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          args: ${{ env.ENV }}
+
+  push-docker-image:
+    runs-on: ubuntu-latest
+    needs: build-docker-image
+    if: inputs.PUSH_IMAGE == 'true'
+    steps:
+      - name: Log in to Docker registry
+        uses: docker/login-action@v3
+        with:
+          registry: my-registry
+          credentials-id: docker-registry-credentials
       - name: Push Docker image
+        id: push-docker
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          labels: |
+            org.opencontainers.image.description: Deployed from GitHub Actions
+      - name: Tag and push latest
+        if: startsWith(github.ref, 'refs/heads/main')
         run: |
-          docker push ${{ env.DOCKER_IMAGE }}
-          
-          if [ "$BRANCH_NAME" == "main" ]; then
-            docker tag ${{ env.DOCKER_IMAGE }} my-registry/${{ env.APP_NAME }}:latest
-            docker push my-registry/${{ env.APP_NAME }}:latest
-          fi
+          docker tag ${{ steps.build-docker-image.outputs.metadata.[${{ env.DOCKER_IMAGE }}].image-id }} my-registry/${{ env.APP_NAME }}:latest
+          docker push my-registry/${{ env.APP_NAME }}:latest
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: push-docker-image
+    steps:
+      - name: Cleanup
+        uses: actions.cleanup@v1.0.0
