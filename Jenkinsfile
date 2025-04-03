@@ -49,7 +49,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 // Build Docker image using the Dockerfile in the repository
-                sh "docker build -t ${DOCKER_IMAGE} --build-arg ENV=${BUILD_ENV} ."
+                sh "docker context ls && docker build -t ${DOCKER_IMAGE} --build-arg ENV=${BUILD_ENV} ."
             }
         }
         
