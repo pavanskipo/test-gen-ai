@@ -1,81 +1,70 @@
-name: Build, Test, and Deploy
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+name: Build and Deploy
 
-env:
-  APP_NAME: my-application
-  DOCKER_IMAGE: my-registry/${{ env.APP_NAME }}:${{ github.run_number }}
-  BUILD_ENV: ${{ inputs.BUILD_TYPE }}
+on:
+  workflow_dispatch:
+    inputs:
+      BRANCH_NAME:
+        type: string
+        default: main
+        description: Git branch to build
+      BUILD_TYPE:
+        type: choice
+        options: ['development', 'staging', 'production']
+        description: Build environment type
+      RUN_TESTS:
+        type: boolean
+        default: true
+        description: Run tests before building
+      PUSH_IMAGE:
+        type: boolean
+        default: true
+        description: Push Docker image to registry
 
 jobs:
-  build-with-makefile:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ inputs.BRANCH_NAME }}
-
-      - name: Set up JDK
-        uses: actions/setup-java@v3
-        with:
-          java-version: '11'
-          distribution: 'adoptium'
-
-      - name: Build application
+        
+      - name: Build Application
         run: |
-          make build ENV=${{ env.BUILD_ENV }}
-
-  run-tests:
-    needs: build-with-makefile
-    if: ${{ inputs.RUN_TESTS == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ inputs.BRANCH_NAME }}
-
-      - name: Run tests
-        run: make test
-
-  build-docker-image:
-    needs: run-tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ inputs.BRANCH_NAME }}
-
-      - name: Build Docker image
-        run: docker build -t ${{ env.DOCKER_IMAGE }} --build-arg ENV=${{ env.BUILD_ENV }} .
-
-  push-docker-image:
-    needs: build-docker-image
-    if: ${{ inputs.PUSH_IMAGE == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ inputs.BRANCH_NAME }}
-
-      - name: Set up Docker login credentials
-        run: echo '${{ secrets.DOCKER_CREDS }}' | docker login -u username --password-stdin my-registry
-
-      - name: Push Docker image
+          make build ENV=${BUILD_TYPE}
+          
+      - name: Run Tests
+        if: inputs.RUN_TESTS == 'true'
         run: |
-          echo "docker push"
-          # docker push ${{ env.DOCKER_IMAGE }}
+          make test
 
-          # # Also tag and push as latest if on main branch
-          # if [ "$${{ inputs.BRANCH_NAME }}" == "main" ]; then
-          #   docker tag ${{ env.DOCKER_IMAGE }} my-registry/${{ env.APP_NAME }}:latest
-          #   docker push my-registry/${{ env.APP_NAME }}:latest
-          # fi
+      - name: Login to Docker Registry
+        if: inputs.PUSH_IMAGE == 'true'
+        uses: actions/checkout@v3
+        with:
+          credentials_id: docker-registry-credentials
+        
+      - name: Build Docker Image
+        if: inputs.PUSH_IMAGE == 'true'
+        run: |
+          echo "Building docker image"
+          
+          DOCKER_TAG=${GITHUB_REF#refs/tags/} 
+          if [ "${DOCKER_TAG}" = "" ]; then
+            DOCKER_TAG=latest;
+          fi
+
+          # Build the Docker image
+          docker build --build-arg ENV=${BUILD_TYPE} -t my-registry/my-application:$DOCKER_TAG .
+          
+      - name: Push Docker Image to Registry
+        if: inputs.PUSH_IMAGE == 'true'
+        run: |
+          echo "Pushing Docker image"
+          
+          docker push my-registry/my-application:$GITHUB_REF
+            
+          # If on main branch, also tag and push as latest
+          if [ "$GITHUB_REF" == "refs/heads/main" ]; then
+            docker tag my-registry/my-application:$GITHUB_REF my-registry/my-application:latest
+            docker push my-registry/my-application:latest
+          fi
