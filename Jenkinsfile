@@ -24,7 +24,7 @@ pipeline {
                     doGenerateSubmoduleConfigurations: false,
                     extensions: [[$class: 'CleanBeforeCheckout']],
                     submoduleCfg: [],
-                    userRemoteConfigs: [[url: 'https://github.com/username/my-repo.git']]
+                    userRemoteConfigs: [[url: 'https://github.com/pavanskipo/test-gen-ai']]
                 ])
             }
         }
