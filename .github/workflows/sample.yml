@@ -6,33 +6,11 @@ on:
   pull_request:
     branches:
       - main
-github_token: ${{ secrets.GITHUB_TOKEN }}
 
 env:
   APP_NAME: my-application
   DOCKER_IMAGE: my-registry/${{ env.APP_NAME }}:${{ github.run_number }}
   BUILD_ENV: ${{ inputs.BUILD_TYPE }}
-
-inputs:
-  BRANCH_NAME:
-    description: 'Git branch to build'
-    required: true
-    default: main
-  BUILD_TYPE:
-    description: 'Build environment type'
-    required: true
-    options:
-      - development
-      - staging
-      - production
-  RUN_TESTS:
-    description: 'Run tests before building'
-    required: false
-    default: true
-  PUSH_IMAGE:
-    description: 'Push Docker image to registry'
-    required: false
-    default: true
 
 jobs:
   build-with-makefile:
