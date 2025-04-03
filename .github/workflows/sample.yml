@@ -3,65 +3,65 @@ name: Build and Deploy
 on:
   workflow_dispatch:
     inputs:
-      BRANCH_NAME:
+      branch-name:
         type: string
         default: main
         description: Git branch to build
-      BUILD_TYPE:
-        type: select
-        options:
-          - development
-          - staging
-          - production
+        required: false
+      build-environment:
+        type: choice
+        options: ['development', 'staging', 'production']
         description: Build environment type
-      RUN_TESTS:
+        required: true
+      run-tests:
         type: boolean
         default: true
         description: Run tests before building
-      PUSH_IMAGE:
+        required: false
+      push-image:
         type: boolean
         default: true
         description: Push Docker image to registry
+        required: false
 
 env:
   APP_NAME: my-application
-  DOCKER_IMAGE: "my-registry/${{APP_NAME}}:${{GITHUB_RUN_ID}}"
+  DOCKER_IMAGE: "my-registry/${{ inputs.build-environment }}:${{ steps.build-docker-image.outputs.build-number }}"
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout code
+        type: checkout
+        uses: actions/checkout@v2
         
-      - name: Build with Makefile
+      - name: Build application
+        run: make build ENV=${{ inputs.build-environment }}
+        
+      - name: Run tests
+        if: inputs.run-tests == 'true'
+        run: make test
+        
+      - name: Build Docker image
+        id: build-docker-image
+        uses: docker/metadata-action@v1
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          context: .
+          metadata-file: ./Dockerfile
+      
+      - name: Push Docker image to registry
+        if: inputs.push-image == 'true'
+        uses: docker/login-action@v2
+        with:
+          credentials: secrets.DOCKER_REGISTRY_CREDENTIALS
         run: |
-          make build ENV=${{ inputs.BUILD_TYPE }}
-          
-      - name: Run Tests
-        if: inputs.RUN_TESTS == 'true'
-        run: |
-          make test
-
-      - name: Build Docker Image
-        run: |
-          docker build \
-            -t ${{ env.DOCKER_IMAGE }} \
-            --build-arg ENV=${{ inputs.BUILD_TYPE }} \
-            .
-            
-      - name: Push Docker Image to Registry
-        if: inputs.PUSH_IMAGE == 'true'
-        run: |
-          echo "${{ secrets.Docker_Registry_Password }}" | docker login -u ${{ secrets.Docker_Registry_Username }} --password-stdin my-registry
+          echo "Pushing Docker image..."
           docker push ${{ env.DOCKER_IMAGE }}
           
-          if [ "${{ inputs.BRANCH_NAME }}" == "main" ]; then
-            docker tag ${{ env.DOCKER_IMAGE }} my-registry/${{APP_NAME}}:latest
-            docker push my-registry/${{APP_NAME}}:latest
+          if [[ "${{ inputs.branch-name }}" == "main" ]]; then
+            echo "Tagging and pushing as latest..."
+            docker tag ${{ env.DOCKER_IMAGE }} my-registry/${{ env.APP_NAME }}:latest
+            docker push my-registry/${{ env.APP_NAME }}:latest
           fi
-
-      - name: Post Build Steps
-        run: |
-          echo 'Build succeeded!'
