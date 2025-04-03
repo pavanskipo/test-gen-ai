@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:18-alpine'
+            args '--network host -v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
     
     parameters {
         string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Git branch to build')
@@ -15,27 +20,15 @@ pipeline {
         BUILD_ENV = "${params.BUILD_TYPE}"
     }
     
-        stages {
+    stages {
         stage('Setup Environment') {
             steps {
-                // Install make if not available
-                script {
-                    def makeInstalled = sh(script: 'which make || echo "not found"', returnStdout: true).trim()
-                    if (makeInstalled == "not found") {
-                        echo "Installing make..."
-                        // For Debian/Ubuntu
-                        sh 'apt-get update && apt-get install -y make || true'
-                        // For RHEL/CentOS
-                        sh 'yum install -y make || true'
-                        // For Alpine
-                        sh 'apk add --no-cache make || true'
-                    } else {
-                        echo "make is already installed"
-                    }
-                }
+                // Install make and docker cli
+                sh 'apk add --no-cache make docker-cli'
             }
         }
         
+        // Rest of the stages remain the same
         stage('Checkout') {
             steps {
                 // Checkout the repository from GitHub
