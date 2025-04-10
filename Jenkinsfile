@@ -90,7 +90,7 @@ pipeline {
             steps {
 
                 println "pushed to docker"
-                Push the Docker image to a registry
+                // Push the Docker image to a registry
                 withCredentials([string(credentialsId: 'docker-registry-credentials', variable: 'DOCKER_CREDS')]) {
                     sh 'echo ${DOCKER_CREDS} | docker login -u username --password-stdin my-registry'
                     sh "docker push ${DOCKER_IMAGE}"
