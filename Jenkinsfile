@@ -55,6 +55,15 @@ pipeline {
                 sh "docker build -t ${DOCKER_IMAGE} --build-arg ENV=${BUILD_ENV} ."
             }
         }
+
+        stage('Run Docker Image') {
+            steps {
+                // Build Docker image using the Dockerfile in the repository
+                println "Running docker image"
+
+                sh "docker run --rm ${DOCKER_IMAGE}"
+            }
+        }
         
         stage('Push Docker Image') {
             when {

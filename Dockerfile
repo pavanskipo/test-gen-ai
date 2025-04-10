@@ -1,14 +1,14 @@
-# Base image
-FROM alpine:latest
+# Use an official Python base image
+FROM python:3.11-slim
 
-# Set working directory
+# Set working directory inside the container
 WORKDIR /app
 
-# Copy the application binary
-COPY build/my-application /app/my-application
+# Copy the current directory contents into the container at /app
+COPY . .
 
-# Set execution permissions
-RUN chmod +x /app/my-application
+# Install dependencies (if requirements.txt exists)
+RUN pip install --no-cache-dir -r requirements.txt || true
 
-# Define the entrypoint
-ENTRYPOINT ["/app/my-application"]
+# Run the Python application
+CMD ["python", "app.py"]
