@@ -17,33 +17,6 @@ pipeline {
     
     stages {
         
-        stage('Init') {
-            steps {
-                script {
-                    echo "Loading external Groovy methods..."
-                    externalMethods = load 'externalMethods.groovy'
-                }
-            }
-        }
-
-        stage('Greeting') {
-            steps {
-                script {
-                    externalMethods.printWelcomeMessage()
-                }
-            }
-        }
-
-        stage('Compute Sum') {
-            steps {
-                script {
-                    def a = 10
-                    def b = 25
-                    externalMethods.printSum(a, b)
-                }
-            }
-        }
-        
         stage('Checkout') {
             steps {
                 // Checkout the repository from GitHub
@@ -52,7 +25,7 @@ pipeline {
                     doGenerateSubmoduleConfigurations: false,
                     extensions: [[$class: 'CleanBeforeCheckout']],
                     submoduleCfg: [],
-                    userRemoteConfigs: [[url: 'https://github.com/twlabs/viasat-jenkins-gha-poc']]
+                    userRemoteConfigs: [[url: 'https://github.com/pavanskipo/test-gen-ai']]
                 ])
             }
         }
