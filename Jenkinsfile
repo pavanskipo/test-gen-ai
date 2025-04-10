@@ -16,6 +16,34 @@ pipeline {
     }
     
     stages {
+        
+        stage('Init') {
+            steps {
+                script {
+                    echo "Loading external Groovy methods..."
+                    externalMethods = load 'externalMethods.groovy'
+                }
+            }
+        }
+
+        stage('Greeting') {
+            steps {
+                script {
+                    externalMethods.printWelcomeMessage()
+                }
+            }
+        }
+
+        stage('Compute Sum') {
+            steps {
+                script {
+                    def a = 10
+                    def b = 25
+                    externalMethods.printSum(a, b)
+                }
+            }
+        }
+        
         stage('Checkout') {
             steps {
                 // Checkout the repository from GitHub
@@ -24,7 +52,7 @@ pipeline {
                     doGenerateSubmoduleConfigurations: false,
                     extensions: [[$class: 'CleanBeforeCheckout']],
                     submoduleCfg: [],
-                    userRemoteConfigs: [[url: 'https://github.com/pavanskipo/test-gen-ai']]
+                    userRemoteConfigs: [[url: 'https://github.com/twlabs/viasat-jenkins-gha-poc']]
                 ])
             }
         }
@@ -51,7 +79,7 @@ pipeline {
                 // Build Docker image using the Dockerfile in the repository
                 println "Building docker image"
 
-                // sh "docker build -t ${DOCKER_IMAGE} --build-arg ENV=${BUILD_ENV} ."
+                sh "docker build -t ${DOCKER_IMAGE} --build-arg ENV=${BUILD_ENV} ."
             }
         }
         
@@ -62,33 +90,20 @@ pipeline {
             steps {
 
                 println "pushed to docker"
-                // Push the Docker image to a registry
-                // withCredentials([string(credentialsId: 'docker-registry-credentials', variable: 'DOCKER_CREDS')]) {
-                //     sh 'echo ${DOCKER_CREDS} | docker login -u username --password-stdin my-registry'
-                //     sh "docker push ${DOCKER_IMAGE}"
+                Push the Docker image to a registry
+                withCredentials([string(credentialsId: 'docker-registry-credentials', variable: 'DOCKER_CREDS')]) {
+                    sh 'echo ${DOCKER_CREDS} | docker login -u username --password-stdin my-registry'
+                    sh "docker push ${DOCKER_IMAGE}"
                     
-                //     // Also tag and push as latest if on main branch
-                //     script {
-                //         if (params.BRANCH_NAME == 'main') {
-                //             sh "docker tag ${DOCKER_IMAGE} my-registry/${APP_NAME}:latest"
-                //             sh "docker push my-registry/${APP_NAME}:latest"
-                //         }
-                //     }
-                // }
+                    // Also tag and push as latest if on main branch
+                    script {
+                        if (params.BRANCH_NAME == 'main') {
+                            sh "docker tag ${DOCKER_IMAGE} my-registry/${APP_NAME}:latest"
+                            sh "docker push my-registry/${APP_NAME}:latest"
+                        }
+                    }
+                }
             }
-        }
-    }
-    
-    post {
-        always {
-            // Clean up workspace after build
-            cleanWs()
-        }
-        success {
-            echo 'Build succeeded!'
-        }
-        failure {
-            echo 'Build failed!'
         }
     }
 }
