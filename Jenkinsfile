@@ -2,7 +2,6 @@ pipeline {
     agent any
     
     parameters {
-        string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Git branch to build')
         choice(name: 'BUILD_TYPE', choices: ['development', 'staging', 'production'], description: 'Build environment type')
         booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests before building')
         booleanParam(name: 'PUSH_IMAGE', defaultValue: true, description: 'Push Docker image to registry')
